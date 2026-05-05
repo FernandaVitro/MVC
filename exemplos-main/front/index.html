@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGP - Sistema de Gestão</title>
+
+    <!-- Material-UI v5 -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@mui/material@5.15.15/umd/material-ui.development.js"></script>
+    <script src="https://unpkg.com/@emotion/react@11.11.3/dist/emotion-react.umd.min.js"></script>
+    <script src="https://unpkg.com/@emotion/styled@11.11.0/dist/emotion-styled.umd.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', 'Roboto', sans-serif !important;
+            background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+            min-height: 100vh;
+            color: #4c0519;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.5) !important;
+            box-shadow: 0 20px 25px -5px rgba(225, 29, 72, 0.05), 0 10px 10px -5px rgba(225, 29, 72, 0.04) !important;
+        }
+
+        .btn-pink-gradient {
+            background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .btn-pink-gradient:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 10px 20px -3px rgba(225, 29, 72, 0.3) !important;
+            filter: brightness(1.1) !important;
+        }
+
+        #modalPesquisa {
+            background: rgba(76, 5, 25, 0.4) !important;
+            backdrop-filter: blur(6px) !important;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #ffe4e6;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #fda4af;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+        const {
+            Box, Button, TextField, Typography, Paper, Table, TableBody,
+            TableCell, TableContainer, TableHead, TableRow, Dialog,
+            DialogTitle, DialogContent, IconButton, Grid, Divider,
+            InputAdornment, CircularProgress, Alert
+        } = MaterialUI;
+
+        const API_URL = 'http://localhost:3000/pessoas';
+
+        const formatarDocumento = (valor) => {
+            const numeros = valor.replace(/\D/g, '');
+
+            if (numeros.length <= 11) {
+                return numeros
+                    .replace(/(\d{3})(\d)/, '$1.$2')
+                    .replace(/(\d{3})(\d)/, '$1.$2')
+                    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            } else {
+                return numeros
+                    .replace(/^(\d{2})(\d)/, '$1.$2')
+                    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+                    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+                    .replace(/(\d{4})(\d)/, '$1-$2');
+            }
+        };
+
+        const SGPForm = () => {
+            const [formData, setFormData] = useState({
+                pessoa_id: '',
+                documento: '',
+                nome_razao_social: '',
+                nome_social_fantasia: '',
+                cep: '',
+                endereco: '',
+                numero: '',
+                bairro: '',
+                cidade: '',
+                estado: '',
+                email: ''
+            });
+            const [pessoas, setPessoas] = useState([]);
+            const [openModal, setOpenModal] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [alertMessage, setAlertMessage] = useState('');
+
+            const handleInputChange = (e) => {
+                const { id, value } = e.target;
+
+                if (id === 'documento') {
+                    setFormData(prev => ({
+                        ...prev,
+                        documento: formatarDocumento(value)
+                    }));
+                    return;
+                }
+
+                setFormData(prev => ({ ...prev, [id]: value }));
+            };
+
+            const buscarCEP = useCallback(async (cep) => {
+                const cepLimpo = cep.replace(/\D/g, "");
+                if (cepLimpo.length === 8) {
+                    try {
+                        const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+                        const data = await res.json();
+                        if (!data.erro) {
+                            setFormData(prev => ({
+                                ...prev,
+                                endereco: data.logradouro,
+                                bairro: data.bairro,
+                                cidade: data.localidade,
+                                estado: data.uf
+                            }));
+                        }
+                    } catch (e) {
+                        console.error("Erro ViaCEP");
+                    }
+                }
+            }, []);
+
+            const carregarPessoas = useCallback(async () => {
+                try {
+                    const res = await fetch(API_URL);
+                    const data = await res.json();
+                    setPessoas(data);
+                } catch (e) {
+                    console.error("Erro ao carregar lista");
+                }
+            }, []);
+
+            const salvar = async () => {
+                setLoading(true);
+                setAlertMessage('');
+
+                const dados = {
+                    ...formData,
+                    tipo: 'Fisica'
+                };
+
+                try {
+                    const metodo = formData.pessoa_id ? 'PUT' : 'POST';
+                    const url = formData.pessoa_id ? `${API_URL}/${formData.pessoa_id}` : API_URL;
+
+                    const response = await fetch(url, {
+                        method: metodo,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(dados)
+                    });
+
+                    if (response.ok) {
+                        setAlertMessage('Sucesso! Cadastro salvo com sucesso.');
+                        limparFormulario();
+                        if (openModal) carregarPessoas();
+                    } else {
+                        const erro = await response.json();
+                        setAlertMessage('Erro: ' + erro.error);
+                    }
+                } catch (error) {
+                    setAlertMessage('Erro ao conectar com o servidor.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const editarPessoa = (pessoa) => {
+                setFormData(pessoa);
+                setOpenModal(false);
+            };
+
+            const deletarPessoa = async (id) => {
+                if (window.confirm('Deseja excluir este registro?')) {
+                    await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                    carregarPessoas();
+                }
+            };
+
+            const limparFormulario = () => {
+                setFormData({
+                    pessoa_id: '',
+                    documento: '',
+                    nome_razao_social: '',
+                    nome_social_fantasia: '',
+                    cep: '',
+                    endereco: '',
+                    numero: '',
+                    bairro: '',
+                    cidade: '',
+                    estado: '',
+                    email: ''
+                });
+            };
+
+            useEffect(() => {
+                if (formData.cep) {
+                    const timeoutId = setTimeout(() => {
+                        buscarCEP(formData.cep);
+                    }, 500);
+                    return () => clearTimeout(timeoutId);
+                }
+            }, [formData.cep, buscarCEP]);
+
+            return (
+                <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 4 }}>
+                    {/* Header */}
+                    <Box sx={{
+                        display: 'flex',
+                        flexDirection: { xs: 'column', md: 'row' },
+                        justifyContent: 'space-between',
+                        alignItems: { xs: 'flex-start', md: 'center' },
+                        mb: 6, gap: 3
+                    }}>
+                        <Box>
+                            <Typography
+                                variant="h3"
+                                sx={{
+                                    fontWeight: 800,
+                                    color: '#9B1C3B',
+                                    textDecoration: 'underline',
+                                    textDecorationColor: '#F5D5DC',
+                                    fontFamily: 'Plus Jakarta Sans'
+                                }}
+                            >
+                                Sistema <span style={{ color: '#7F1624' }}>de</span> Gestão
+                            </Typography>
+                            <Typography variant="body1" sx={{ color: '#FB7185', fontStyle: 'italic', fontWeight: 500 }}>
+                                Gestão de Dados
+                            </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                            <Button
+                                variant="outlined"
+                                startIcon={<i className="material-icons">search</i>}
+                                onClick={() => { setOpenModal(true); carregarPessoas(); }}
+                                sx={{
+                                    borderColor: '#FECDD3',
+                                    color: '#DC2626',
+                                    fontWeight: 700,
+                                    borderRadius: 10,
+                                    textTransform: 'none',
+                                    px: 4,
+                                    py: 1.5,
+                                    fontFamily: 'Plus Jakarta Sans',
+                                    '&:hover': {
+                                        backgroundColor: '#FDF2F8',
+                                        borderColor: '#FECDD3'
+                                    }
+                                }}
+                            >
+                                Consultar
+                            </Button>
+                            <Button
+                                variant="contained"
+                                startIcon={<i className="material-icons">refresh</i>}
+                                onClick={limparFormulario}
+                                sx={{
+                                    backgroundColor: '#FECACA',
+                                    color: '#7F1624',
+                                    fontWeight: 700,
+                                    borderRadius: 10,
+                                    textTransform: 'none',
+                                    px: 4,
+                                    py: 1.5,
+                                    fontFamily: 'Plus Jakarta Sans',
+                                    '&:hover': {
+                                        backgroundColor: '#FECDD3'
+                                    }
+                                }}
+                            >
+                                Limpar
+                            </Button>
+                        </Box>
+                    </Box>
+
+                    {/* Alert */}
+                    {alertMessage && (
+                        <Alert severity="info" sx={{ mb: 4, borderRadius: 3 }}>
+                            {alertMessage}
+                        </Alert>
+                    )}
+
+                    {/* Form */}
+                    <Paper elevation={0} className="glass-card" sx={{ p: { xs: 4, md: 8 }, borderRadius: '40px' }}>
+                        <Grid container spacing={3}>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    fullWidth
+                                    id="documento"
+                                    label="CPF / CNPJ"
+                                    value={formData.documento}
+                                    onChange={handleInputChange}
+                                    InputProps={{
+                                        startAdornment: <InputAdornment position="start">
+                                            <i className="material-icons" style={{ color: '#FBB6CE' }}>fingerprint</i>
+                                        </InputAdornment>
+                                    }}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            borderRadius: '20px',
+                                            backgroundColor: 'rgba(255,255,255,0.6)',
+                                            '&:hover': { backgroundColor: 'rgba(255,255,255,0.8)' },
+                                            '&.Mui-focused': {
+                                                backgroundColor: 'white',
+                                                boxShadow: '0 0 0 4px rgba(225, 29, 72, 0.1)',
+                                                '& fieldset': { borderColor: '#FB7185' }
+                                            },
+                                            '& fieldset': { borderColor: '#FECDD3' }
+                                        },
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        },
+                                        fontFamily: 'Plus Jakarta Sans'
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={8}>
+                                <TextField
+                                    fullWidth
+                                    id="nome_razao_social"
+                                    label="Identificação Completa"
+                                    value={formData.nome_razao_social}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            borderRadius: '20px',
+                                            backgroundColor: 'rgba(255,255,255,0.6)',
+                                            '&.Mui-focused': {
+                                                backgroundColor: 'white',
+                                                boxShadow: '0 0 0 4px rgba(225, 29, 72, 0.1)',
+                                                '& fieldset': { borderColor: '#FB7185' }
+                                            }
+                                        },
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        },
+                                        fontFamily: 'Plus Jakarta Sans'
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    id="nome_social_fantasia"
+                                    label="Nome Social ou Nome Fantasia"
+                                    value={formData.nome_social_fantasia}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={3}>
+                                <TextField
+                                    fullWidth
+                                    id="cep"
+                                    label="CEP"
+                                    value={formData.cep}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={7}>
+                                <TextField
+                                    fullWidth
+                                    id="endereco"
+                                    label="Logradouro"
+                                    value={formData.endereco}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={2}>
+                                <TextField
+                                    fullWidth
+                                    id="numero"
+                                    label="Nº"
+                                    value={formData.numero}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    fullWidth
+                                    id="bairro"
+                                    label="Bairro"
+                                    value={formData.bairro}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={5}>
+                                <TextField
+                                    fullWidth
+                                    id="cidade"
+                                    label="Cidade"
+                                    value={formData.cidade}
+                                    onChange={handleInputChange}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={3}>
+                                <TextField
+                                    fullWidth
+                                    id="estado"
+                                    label="UF"
+                                    value={formData.estado}
+                                    onChange={handleInputChange}
+                                    textAlign="center"
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        },
+                                        '& input': { textTransform: 'uppercase', textAlign: 'center' }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    id="email"
+                                    label="E-mail de Contato"
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={handleInputChange}
+                                    InputProps={{
+                                        startAdornment: <InputAdornment position="start">
+                                            <i className="material-icons" style={{ color: '#FBB6CE' }}>send</i>
+                                        </InputAdornment>
+                                    }}
+                                    sx={{
+                                        '& .MuiInputLabel-root': {
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: '#991B1B',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em'
+                                        }
+                                    }}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    onClick={salvar}
+                                    disabled={loading}
+                                    className="btn-pink-gradient"
+                                    sx={{
+                                        py: 3,
+                                        borderRadius: '32px',
+                                        fontSize: '1.125rem',
+                                        fontWeight: 700,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.05em',
+                                        fontFamily: 'Plus Jakarta Sans',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 1
+                                    }}
+                                    startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <i className="material-icons">favorite</i>}
+                                >
+                                    {loading ? 'Salvando...' : 'Salvar Cadastro'}
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Paper>
+
+                    {/* Modal de Pesquisa */}
+                    <Dialog
+                        open={openModal}
+                        onClose={() => setOpenModal(false)}
+                        maxWidth="lg"
+                        fullWidth
+                        PaperProps={{
+                            sx: {
+                                borderRadius: '40px',
+                                background: 'white'
+                            }
+                        }}
+                        sx={{ '& .MuiBackdrop-root': { background: 'rgba(76, 5, 25, 0.4)', backdropFilter: 'blur(6px)' } }}
+                    >
+                        <DialogTitle sx={{
+                            p: 4,
+                            borderBottom: '1px solid rgba(244, 63, 94, 0.1)',
+                            backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <Box>
+                                <Typography variant="h4" sx={{ fontWeight: 700, color: '#7F1624', fontFamily: 'Plus Jakarta Sans' }}>
+                                    Registros Ativos
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#FB7185' }}>
+                                    Visualize e gerencie seus contatos
+                                </Typography>
+                            </Box>
+                            <IconButton
+                                onClick={() => setOpenModal(false)}
+                                sx={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: '20px',
+                                    border: '1px solid #FECDD3',
+                                    color: '#EC4899',
+                                    '&:hover': {
+                                        backgroundColor: '#EC4899',
+                                        color: 'white'
+                                    }
+                                }}
+                            >
+                                <i className="material-icons">close</i>
+                            </IconButton>
+                        </DialogTitle>
+                        <DialogContent sx={{ p: 4, maxHeight: '60vh', overflow: 'auto' }}>
+                            <TableContainer>
+                                <Table>
+                                    <TableHead>
+                                        <TableRow sx={{
+                                            '& th': {
+                                                color: '#F472B6',
+                                                fontSize: '0.625rem',
+                                                fontWeight: 900,
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.2em',
+                                                borderBottom: '1px solid #FEE2E2',
+                                                py: 3,
+                                                px: 1
+                                            }
+                                        }}>
+                                            <TableCell>Cod</TableCell>
+                                            <TableCell>Nome</TableCell>
+                                            <TableCell>Documento</TableCell>
+                                            <TableCell align="right">Ações</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {pessoas.map((p) => (
+                                            <TableRow
+                                                key={p.id}
+                                                sx={{
+                                                    '&:hover': {
+                                                        backgroundColor: 'rgba(244, 63, 94, 0.05)'
+                                                    },
+                                                    borderBottom: '1px solid rgba(254, 226, 226, 0.5)'
+                                                }}
+                                            >
+                                                <TableCell sx={{ py: 3, px: 2, color: '#F472B6', fontWeight: 700 }}>
+                                                    #{p.id}
+                                                </TableCell>
+                                                <TableCell sx={{ py: 3 }}>
+                                                    <Typography sx={{ color: '#7F1624', fontWeight: 500 }}>
+                                                        {p.nome_razao_social}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: '#FB7185', fontSize: '0.75rem', fontWeight: 400, letterSpacing: '0.05em' }}>
+                                                        {p.email}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell sx={{ py: 3, fontSize: '0.875rem', fontFamily: 'monospace', color: '#DC2626' }}>
+                                                    {p.documento}
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ py: 3 }}>
+                                                    <IconButton
+                                                        onClick={() => editarPessoa(p)}
+                                                        size="small"
+                                                        sx={{
+                                                            width: 36,
+                                                            height: 36,
+                                                            borderRadius: '12px',
+                                                            backgroundColor: '#FEF2F2',
+                                                            color: '#EC4899',
+                                                            '&:hover': {
+                                                                backgroundColor: '#EC4899',
+                                                                color: 'white'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <i className="material-icons" style={{ fontSize: '14px' }}>edit</i>
+                                                    </IconButton>
+                                                    <IconButton
+                                                        onClick={() => deletarPessoa(p.id)}
+                                                        size="small"
+                                                        sx={{
+                                                            width: 36,
+                                                            height: 36,
+                                                            borderRadius: '12px',
+                                                            ml: 1,
+                                                            backgroundColor: '#FEF2F2',
+                                                            color: '#FBBF24',
+                                                            '&:hover': {
+                                                                backgroundColor: '#7F1D1D',
+                                                                color: 'white'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <i className="material-icons" style={{ fontSize: '14px' }}>delete</i>
+                                                    </IconButton>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </DialogContent>
+                    </Dialog>
+                </Box>
+            );
+        };
+        const Produtos = () => {
+            const [produtos, setProdutos] = React.useState([]);
+            const [form, setForm] = React.useState({
+                id: '',
+                nome: '',
+                descricao: '',
+                preco: '',
+                estoque: '',
+                categoria: ''
+            });
+
+            const carregar = async () => {
+                try {
+                    const res = await fetch('http://localhost:3000/produtos');
+                    const data = await res.json();
+
+                    // 🔥 Padroniza id para o front
+                    const dadosFormatados = data.map(p => ({
+                        ...p,
+                        id: p.id_produtos
+                    }));
+
+                    setProdutos(dadosFormatados);
+                } catch (e) {
+                    console.log('Erro ao carregar produtos');
+                }
+            };
+
+            const salvar = async () => {
+                try {
+                    const metodo = form.id ? 'PUT' : 'POST';
+
+                    const url = form.id
+                        ? `http://localhost:3000/produtos/${form.id}`
+                        : 'http://localhost:3000/produtos';
+
+                    const response = await fetch(url, {
+                        method: metodo,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(form)
+                    });
+
+                    if (!response.ok) {
+                        const erro = await response.text();
+                        alert('Erro: ' + erro);
+                        return;
+                    }
+
+                    alert(form.id ? 'Produto atualizado!' : 'Produto salvo!');
+
+                    setForm({
+                        id: '',
+                        nome: '',
+                        descricao: '',
+                        preco: '',
+                        estoque: '',
+                        categoria: ''
+                    });
+
+                    carregar();
+
+                } catch (error) {
+                    alert('Erro ao conectar com servidor');
+                }
+            };
+
+            const deletar = async (id) => {
+                if (!window.confirm('Deseja excluir este produto?')) return;
+
+                try {
+                    const res = await fetch(`http://localhost:3000/produtos/${id}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (res.status === 204) {
+                        alert('Produto deletado com sucesso!');
+                        carregar();
+                    } else {
+                        const erro = await res.json();
+                        alert('Erro: ' + erro.message);
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                    alert('Erro ao conectar com servidor');
+                }
+            };
+
+            React.useEffect(() => {
+                carregar();
+            }, []);
+
+            return (
+                <Box sx={{ maxWidth: 1100, mx: 'auto', mt: 4 }}>
+                    <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
+                        Produtos
+                    </Typography>
+
+                    {/* FORMULÁRIO */}
+                    <Paper className="glass-card" sx={{ p: 4, mb: 4 }}>
+                        <Grid container spacing={2}>
+
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Nome"
+                                    value={form.nome}
+                                    onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Categoria"
+                                    value={form.categoria}
+                                    onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Descrição"
+                                    multiline
+                                    rows={3}
+                                    value={form.descricao}
+                                    onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    fullWidth
+                                    label="Preço"
+                                    value={form.preco}
+                                    onChange={(e) => setForm({ ...form, preco: e.target.value })}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    fullWidth
+                                    label="Estoque"
+                                    type="number"
+                                    value={form.estoque}
+                                    onChange={(e) => setForm({ ...form, estoque: e.target.value })}
+                                />
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    className="btn-pink-gradient"
+                                    onClick={salvar}
+                                >
+                                    Salvar Produto
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Paper>
+
+                    {/* TABELA */}
+                    <TableContainer component={Paper} className="glass-card">
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Nome</TableCell>
+                                    <TableCell>Categoria</TableCell>
+                                    <TableCell>Preço</TableCell>
+                                    <TableCell>Estoque</TableCell>
+                                    <TableCell>Descrição</TableCell>
+                                    <TableCell align="right">Ações</TableCell>
+                                </TableRow>
+                            </TableHead>
+
+                            <TableBody>
+                                {produtos.map((p) => (
+                                    <TableRow key={p.id}>
+                                        <TableCell>{p.nome}</TableCell>
+                                        <TableCell>{p.categoria}</TableCell>
+                                        <TableCell>R$ {p.preco}</TableCell>
+                                        <TableCell>{p.estoque}</TableCell>
+                                        <TableCell>{p.descricao}</TableCell>
+                                        <TableCell align="right">
+                                            <IconButton onClick={() => setForm(p)}>
+                                                <i className="material-icons">edit</i>
+                                            </IconButton>
+
+                                            <IconButton onClick={() => deletar(p.id)}>
+                                                <i className="material-icons">delete</i>
+                                            </IconButton>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+
+                        </Table>
+                    </TableContainer>
+                </Box>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const App = () => {
+            const [pagina, setPagina] = React.useState('pessoas');
+
+            return (
+                <Box>
+                    <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                        <Button variant="contained" onClick={() => setPagina('pessoas')}>
+                            Pessoas
+                        </Button>
+                        <Button variant="contained" onClick={() => setPagina('produtos')}>
+                            Produtos
+                        </Button>
+                    </Box>
+
+                    {pagina === 'pessoas' && <SGPForm />}
+                    {pagina === 'produtos' && <Produtos />}
+                </Box>
+            );
+        };
+
+        root.render(<App />);
+    </script>
+</body>
+
+<<<<<<< HEAD
+</html>
+=======
+</html>
+>>>>>>> 1fd93d0bb2028cefa3c4c0f19304abae70db488f
