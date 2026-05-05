@@ -53,8 +53,13 @@ app.post('/pessoas', async (req, res) => {
     } = req.body;
 
     const query = `
+<<<<<<< HEAD
+        INSERT INTO pessoas 
+        (nome_razao_social, nome_social_fantasia, cep, endereco, numero, bairro, cidade, estado, documento, tipo, email) 
+=======
         INSERT INTO pessoas
         (nome_razao_social, nome_social_fantasia, cep, endereco, numero, bairro, cidade, estado, documento, tipo, email)
+>>>>>>> ed2a1219ae565b005b9c92475192eabc12db8ed9
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
@@ -89,10 +94,17 @@ app.put('/pessoas/:id', async (req, res) => {
     } = req.body;
 
     const query = `
+<<<<<<< HEAD
+        UPDATE pessoas 
+        SET nome_razao_social = ?, nome_social_fantasia = ?, cep = ?, endereco = ?, 
+            numero = ?, bairro = ?, cidade = ?, estado = ?, pais = ?, documento = ?, 
+            tipo = ?, email = ? 
+=======
         UPDATE pessoas
         SET nome_razao_social = ?, nome_social_fantasia = ?, cep = ?, endereco = ?,
             numero = ?, bairro = ?, cidade = ?, estado = ?, pais = ?, documento = ?,
             tipo = ?, email = ?
+>>>>>>> ed2a1219ae565b005b9c92475192eabc12db8ed9
         WHERE id = ?
     `;
 
@@ -154,8 +166,13 @@ app.post('/produtos', async (req, res) => {
     } = req.body;
 
     const query = `
+<<<<<<< HEAD
+        INSERT INTO produtos 
+        (nome,descricao,preco,estoque,categoria) 
+=======
         INSERT INTO produtos
         (nome,descricao,preco,estoque,categoria)
+>>>>>>> ed2a1219ae565b005b9c92475192eabc12db8ed9
         VALUES (?, ?, ?, ?, ?)
     `;
 
@@ -231,4 +248,8 @@ app.put('/produtos/:id_produtos', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> ed2a1219ae565b005b9c92475192eabc12db8ed9
